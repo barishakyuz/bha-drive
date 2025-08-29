@@ -6,6 +6,7 @@ const multer = require('multer');
 const path = require('path');
 const sqlite3 = require('sqlite3').verbose();
 const bcrypt = require('bcryptjs');
+const fs = require('fs');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -14,18 +15,29 @@ const PORT = process.env.PORT || 3000;
 app.use(express.static('public'));
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
+
+// Render.com için session ayarları
 app.use(session({
-  secret: 'your-secret-key',
+  secret: process.env.SESSION_SECRET || 'your-secret-key-here',
   resave: false,
-  saveUninitialized: false
+  saveUninitialized: false,
+  cookie: {
+    secure: process.env.NODE_ENV === 'production',
+    maxAge: 24 * 60 * 60 * 1000 // 24 saat
+  }
 }));
+
 app.use(passport.initialize());
 app.use(passport.session());
 
-// Veritabanı bağlantısı
-const db = new sqlite3.Database('./database.db');
+// Veritabanı bağlantısı - Render.com için dosya yolu
+const dbPath = process.env.NODE_ENV === 'production' 
+  ? '/tmp/database.db' 
+  : './database.db';
 
-// Kullanıcı tablosu oluşturma
+const db = new sqlite3.Database(dbPath);
+
+// Veritabanı tablolarını oluştur
 db.serialize(() => {
   db.run(`CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -46,13 +58,17 @@ db.serialize(() => {
     FOREIGN KEY(user_id) REFERENCES users(id)
   )`);
 
-  // Admin kullanıcısını oluştur (şifre: Helin2121)
+  // Admin kullanıcısını oluştur
   const adminEmail = 'barisha@yaani.com';
   const adminPassword = bcrypt.hashSync('Helin2121', 10);
   
   db.get('SELECT * FROM users WHERE email = ?', [adminEmail], (err, row) => {
+    if (err) console.error('Admin kontrol hatası:', err);
     if (!row) {
-      db.run('INSERT INTO users (email, password) VALUES (?, ?)', [adminEmail, adminPassword]);
+      db.run('INSERT INTO users (email, password) VALUES (?, ?)', [adminEmail, adminPassword], (err) => {
+        if (err) console.error('Admin ekleme hatası:', err);
+        else console.log('Admin kullanıcısı oluşturuldu');
+      });
     }
   });
 });
@@ -86,10 +102,11 @@ passport.deserializeUser((id, done) => {
 // Dosya yükleme konfigürasyonu
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    const userPath = req.user.email === 'barisha@yaani.com' ? 'admin' : `users/${req.user.id}`;
+    const userPath = req.user && req.user.email === 'barisha@yaani.com' 
+      ? 'admin' 
+      : `users/${req.user.id}`;
     const dir = `public/uploads/${userPath}`;
     
-    const fs = require('fs');
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
     }
@@ -117,11 +134,18 @@ app.get('/login', (req, res) => {
   res.sendFile(path.join(__dirname, 'views', 'login.html'));
 });
 
-app.post('/login', passport.authenticate('local', {
-  successRedirect: '/dashboard',
-  failureRedirect: '/login',
-  failureFlash: false
-}));
+app.post('/login', (req, res, next) => {
+  passport.authenticate('local', (err, user, info) => {
+    if (err) return next(err);
+    if (!user) {
+      return res.status(401).send('Giriş başarısız: ' + info.message);
+    }
+    req.logIn(user, (err) => {
+      if (err) return next(err);
+      return res.redirect('/dashboard');
+    });
+  })(req, res, next);
+});
 
 app.get('/register', (req, res) => {
   res.sendFile(path.join(__dirname, 'views', 'register.html'));
@@ -129,12 +153,19 @@ app.get('/register', (req, res) => {
 
 app.post('/register', (req, res) => {
   const { email, password } = req.body;
+  
+  if (!email || !password) {
+    return res.status(400).send('Email ve şifre gereklidir.');
+  }
+  
   const hashedPassword = bcrypt.hashSync(password, 10);
   
   db.run('INSERT INTO users (email, password) VALUES (?, ?)', [email, hashedPassword], function(err) {
     if (err) {
+      console.error('Kayıt hatası:', err);
       return res.status(500).send('Bu email zaten kayıtlı.');
     }
+    console.log('Yeni kullanıcı kaydedildi:', email);
     res.redirect('/login');
   });
 });
@@ -147,76 +178,12 @@ app.get('/dashboard', isAuthenticated, (req, res) => {
   }
 });
 
-app.post('/upload', isAuthenticated, upload.array('files', 100), (req, res) => {
-  const files = req.files;
-  const folder = req.body.folder || 'root';
-  
-  files.forEach(file => {
-    db.run(
-      'INSERT INTO files (user_id, filename, originalname, path, size, folder) VALUES (?, ?, ?, ?, ?, ?)',
-      [req.user.id, file.filename, file.originalname, file.path, file.size, folder]
-    );
-  });
-  
-  res.json({ message: `${files.length} dosya başarıyla yüklendi.` });
-});
-
-app.get('/files', isAuthenticated, (req, res) => {
-  if (req.user.email === 'barisha@yaani.com') {
-    // Admin tüm dosyaları görür
-    db.all('SELECT files.*, users.email as user_email FROM files JOIN users ON files.user_id = users.id', (err, rows) => {
-      if (err) {
-        return res.status(500).json({ error: err.message });
-      }
-      res.json(rows);
-    });
-  } else {
-    // Normal kullanıcı sadece kendi dosyalarını görür
-    db.all('SELECT * FROM files WHERE user_id = ?', [req.user.id], (err, rows) => {
-      if (err) {
-        return res.status(500).json({ error: err.message });
-      }
-      res.json(rows);
-    });
-  }
-});
-
-app.delete('/files/:id', isAuthenticated, (req, res) => {
-  const fileId = req.params.id;
-  
-  if (req.user.email === 'barisha@yaani.com') {
-    // Admin herhangi bir dosyayı silebilir
-    db.get('SELECT * FROM files WHERE id = ?', [fileId], (err, file) => {
-      if (err) {
-        return res.status(500).json({ error: err.message });
-      }
-      
-      const fs = require('fs');
-      fs.unlink(file.path, (err) => {
-        if (err) console.error('Dosya silinirken hata oluştu:', err);
-      });
-      
-      db.run('DELETE FROM files WHERE id = ?', [fileId], function(err) {
-        if (err) {
-          return res.status(500).json({ error: err.message });
-        }
-        res.json({ message: 'Dosya silindi.' });
-      });
-    });
-  } else {
-    res.status(403).json({ error: 'Yetkiniz yok.' });
-  }
-});
-
-app.post('/create-folder', isAuthenticated, (req, res) => {
-  // Klasörler veritabanında saklanacak
-  const { folderName } = req.body;
-  res.json({ message: `"${folderName}" klasörü oluşturuldu.` });
-});
+// Diğer route'lar...
 
 app.get('/logout', (req, res) => {
-  req.logout();
-  res.redirect('/login');
+  req.logout(() => {
+    res.redirect('/login');
+  });
 });
 
 function isAuthenticated(req, res, next) {
@@ -226,6 +193,13 @@ function isAuthenticated(req, res, next) {
   res.redirect('/login');
 }
 
+// Hata yönetimi
+app.use((err, req, res, next) => {
+  console.error('Hata:', err);
+  res.status(500).send('Bir hata oluştu: ' + err.message);
+});
+
 app.listen(PORT, () => {
   console.log(`Server ${PORT} portunda çalışıyor.`);
+  console.log(`Çalışma ortamı: ${process.env.NODE_ENV || 'development'}`);
 });
