@@ -28,6 +28,12 @@
             border-radius: 5px;
             display: inline-block;
             margin: 10px;
+            border: none;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        .btn:hover {
+            background: #3367d6;
         }
     </style>
 </head>
@@ -35,10 +41,26 @@
     <div class="container">
         <h1>Online Drive Uygulaması</h1>
         <p>Drive uygulaması başarıyla dağıtıldı!</p>
-        <p>Giriş yapmak için aşağıdaki linke tıklayın:</p>
-        <a href="/login.html" class="btn">Giriş Yap</a>
+        <p>Giriş yapmak için aşağıdaki butona tıklayın:</p>
+        
+        <button class="btn" onclick="window.location.href='login.html'">Giriş Yap</button>
+        
         <p>Veya</p>
-        <a href="/register.html" class="btn">Kayıt Ol</a>
+        
+        <button class="btn" onclick="window.location.href='register.html'">Kayıt Ol</button>
+
+        <p style="margin-top: 30px; color: #666;">
+            Admin Girişi için:<br>
+            Email: barisha@yaani.com<br>
+            Şifre: Helin2121
+        </p>
     </div>
+
+    <script>
+        // Sayfa yüklendiğinde çalışacak
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('Online Drive uygulaması hazır!');
+        });
+    </script>
 </body>
 </html>
