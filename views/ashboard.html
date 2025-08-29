@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kullanıcı Paneli - Online Drive</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+    <header>
+        <h1>Online Drive</h1>
+        <nav>
+            <span>Hoşgeldiniz, <span id="user-email"></span></span>
+            <a href="/logout">Çıkış Yap</a>
+        </nav>
+    </header>
+
+    <main>
+        <div class="upload-section">
+            <h2>Dosya Yükle</h2>
+            <input type="file" id="file-input" multiple>
+            <input type="text" id="folder-name" placeholder="Klasör adı (opsiyonel)">
+            <button onclick="uploadFiles()">Dosyaları Yükle</button>
+            <div id="upload-status"></div>
+        </div>
+
+        <div class="files-section">
+            <h2>Dosyalarım</h2>
+            <div id="files-list"></div>
+        </div>
+    </main>
+
+    <script src="/js/script.js"></script>
+</body>
+</html>
