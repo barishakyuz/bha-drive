@@ -1,6 +1,6 @@
 {
   "name": "bha-drive",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Özel online drive sistemi",
   "main": "server.js",
   "scripts": {
@@ -15,7 +15,8 @@
     "passport-local": "^1.0.0",
     "multer": "^1.4.5-lts.1",
     "sqlite3": "^5.1.6",
-    "bcryptjs": "^2.4.3"
+    "bcryptjs": "^2.4.3",
+    "connect-sqlite3": "^0.9.14"
   },
   "devDependencies": {
     "nodemon": "^3.0.1"
