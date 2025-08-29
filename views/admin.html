@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Paneli - Online Drive</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+    <header>
+        <h1>Online Drive - Admin Paneli</h1>
+        <nav>
+            <span>Hoşgeldiniz, <span id="user-email"></span> (Admin)</span>
+            <a href="/logout">Çıkış Yap</a>
+        </nav>
+    </header>
+
+    <main>
+        <div class="admin-controls">
+            <h2>Tüm Kullanıcı Dosyaları</h2>
+            <button onclick="loadAllFiles()">Dosyaları Yenile</button>
+        </div>
+
+        <div class="files-section">
+            <h2>Tüm Dosyalar</h2>
+            <div id="all-files-list"></div>
+        </div>
+    </main>
+
+    <script src="/js/admin.js"></script>
+</body>
+</html>
