@@ -7,6 +7,7 @@ const path = require('path');
 const sqlite3 = require('sqlite3').verbose();
 const bcrypt = require('bcryptjs');
 const fs = require('fs');
+const SQLiteStore = require('connect-sqlite3')(session);
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -16,9 +17,18 @@ app.use(express.static('public'));
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 
-// Render.com için session ayarları
+// Render.com için SQLite session store
+const dbPath = process.env.NODE_ENV === 'production' 
+  ? '/tmp/sessions.db' 
+  : './sessions.db';
+
+// Session configuration
 app.use(session({
-  secret: process.env.SESSION_SECRET || 'your-secret-key-here',
+  store: new SQLiteStore({
+    dir: process.env.NODE_ENV === 'production' ? '/tmp' : '.',
+    db: 'sessions.db'
+  }),
+  secret: process.env.SESSION_SECRET || 'fallback-secret-key',
   resave: false,
   saveUninitialized: false,
   cookie: {
@@ -31,11 +41,11 @@ app.use(passport.initialize());
 app.use(passport.session());
 
 // Veritabanı bağlantısı - Render.com için dosya yolu
-const dbPath = process.env.NODE_ENV === 'production' 
+const appDbPath = process.env.NODE_ENV === 'production' 
   ? '/tmp/database.db' 
   : './database.db';
 
-const db = new sqlite3.Database(dbPath);
+const db = new sqlite3.Database(appDbPath);
 
 // Veritabanı tablolarını oluştur
 db.serialize(() => {
@@ -102,7 +112,9 @@ passport.deserializeUser((id, done) => {
 // Dosya yükleme konfigürasyonu
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    const userPath = req.user && req.user.email === 'barisha@yaani.com' 
+    if (!req.user) return cb(new Error('Kullanıcı girişi gerekli'));
+    
+    const userPath = req.user.email === 'barisha@yaani.com' 
       ? 'admin' 
       : `users/${req.user.id}`;
     const dir = `public/uploads/${userPath}`;
@@ -138,7 +150,12 @@ app.post('/login', (req, res, next) => {
   passport.authenticate('local', (err, user, info) => {
     if (err) return next(err);
     if (!user) {
-      return res.status(401).send('Giriş başarısız: ' + info.message);
+      return res.status(401).send(`
+        <script>
+          alert('Giriş başarısız: ${info.message}');
+          window.location.href = '/login';
+        </script>
+      `);
     }
     req.logIn(user, (err) => {
       if (err) return next(err);
@@ -163,10 +180,20 @@ app.post('/register', (req, res) => {
   db.run('INSERT INTO users (email, password) VALUES (?, ?)', [email, hashedPassword], function(err) {
     if (err) {
       console.error('Kayıt hatası:', err);
-      return res.status(500).send('Bu email zaten kayıtlı.');
+      return res.status(500).send(`
+        <script>
+          alert('Bu email zaten kayıtlı!');
+          window.location.href = '/register';
+        </script>
+      `);
     }
     console.log('Yeni kullanıcı kaydedildi:', email);
-    res.redirect('/login');
+    res.send(`
+      <script>
+        alert('Kayıt başarılı! Giriş yapabilirsiniz.');
+        window.location.href = '/login';
+      </script>
+    `);
   });
 });
 
@@ -178,14 +205,14 @@ app.get('/dashboard', isAuthenticated, (req, res) => {
   }
 });
 
-// Diğer route'lar...
-
+// Logout
 app.get('/logout', (req, res) => {
   req.logout(() => {
     res.redirect('/login');
   });
 });
 
+// Middleware: Kimlik doğrulama kontrolü
 function isAuthenticated(req, res, next) {
   if (req.isAuthenticated()) {
     return next();
@@ -202,4 +229,5 @@ app.use((err, req, res, next) => {
 app.listen(PORT, () => {
   console.log(`Server ${PORT} portunda çalışıyor.`);
   console.log(`Çalışma ortamı: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`Session store: SQLite`);
 });
